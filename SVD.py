@@ -1,20 +1,40 @@
 import pandas as pd
 import numpy as np
+import math
 from decimal import Decimal
 
+
 def vector_norm(x):
+    """Compute the L2 norm of a vector."""
     return Decimal(np.dot(x, x)).sqrt()
 
 
 def qr_decomposition(A):
+    """
+    Compute the QR decomposition of a matrix A using the Gram-Schmidt algorithm.
+
+    Parameters:
+    A (numpy.ndarray): The matrix to decompose.
+
+    Returns:
+    (numpy.ndarray, numpy.ndarray): A tuple of Q and R matrices that represent the QR decomposition of A, where:
+        Q (numpy.ndarray): The orthogonal matrix Q.
+        R (numpy.ndarray): The upper triangular matrix R.
+    """
+    # Get the shape of the input matrix
     m, n = A.shape
+
+    # Initialize the matrices
     Q = np.zeros((m, n))
     R = np.zeros((n, n))
+
+    # Perform the Gram-Schmidt orthogonalization
     for j in range(n):
         v = A[:, j]
         for i in range(j):
             R[i, j] = np.dot(Q[:, i], A[:, j])
             v = v - R[i, j] * Q[:, i]
+        # R[j, j] = np.linalg.norm(v)
         R[j, j] = vector_norm(v)
         Q[:, j] = v / R[j, j]
 
@@ -22,18 +42,31 @@ def qr_decomposition(A):
 
 
 def rank_of_matrix(mat):
+    """
+    This function calculates the rank of a matrix 'mat' using Gaussian elimination method.
+    It returns the rank of the matrix.
+    """
+    # Define the dimensions of the matrix
     m = len(mat)
     n = len(mat[0])
 
     rank = min(m, n)
 
+    # Perform Gaussian elimination
     for row in range(rank):
+        # Check if the diagonal element is not zero
         if mat[row][row] != 0:
             for col in range(row + 1, m):
+                # Calculate the factor by which to multiply the current row
+                # to eliminate the non-zero element in the current column
                 factor = mat[col][row] / mat[row][row]
                 for i in range(row, n):
+                    # Update the current row by subtracting the product of the factor
+                    # and the corresponding element in the row being eliminated from it
                     mat[col][i] -= factor * mat[row][i]
         else:
+            # If the diagonal element is zero, look for a non-zero element below it
+            # and swap the rows if necessary
             reduce_rank = True
             for i in range(row + 1, m):
                 if mat[i][row] != 0:
@@ -49,77 +82,138 @@ def rank_of_matrix(mat):
 
 
 def eig(A):
+    """
+    Compute the eigenvalues and eigenvectors of a matrix A using the power iteration method.
+
+    Parameters:
+    A (numpy.ndarray): The matrix to compute eigenvalues and eigenvectors.
+
+    Returns:
+    (eigvals, eigvecs): A tuple of arrays that represent the eigenvalues and eigenvectors of A, where:
+        eigvals (numpy.ndarray): The eigenvalues of A.
+        eigvecs (numpy.ndarray): The eigenvectors of A.
+    """
+    # set the number of iterations and tolerance level
     max_iter = 100
     tol = 1e-6
 
+    # initialize the eigenvectors
     m, n = A.shape
     eigvecs = np.random.randn(n, n)
 
+    # compute the largest eigenvalue and eigenvector
     for i in range(max_iter):
+        # compute the new eigenvector
         eigvecs_new = A @ eigvecs
+        # eigvecs_new, _ = np.linalg.qr(eigvecs_new)
         eigvecs_new, _ = qr_decomposition(eigvecs_new)
         if np.allclose(eigvecs_new, eigvecs, rtol=tol):
             break
         eigvecs = eigvecs_new
 
+    # compute the eigenvalues
     eigvals = np.diag(eigvecs.T @ A @ eigvecs)
 
     return eigvals, eigvecs
 
 
 def SVD(A):
+    """
+    Compute Singular Value Decomposition of matrix A using NumPy.
+
+    Args:
+        A: numpy.array, matrix to be decomposed
+
+    Returns:
+        U: numpy.array, matrix containing left singular vectors
+        s: numpy.array, array containing singular values
+        V_T: numpy.array, matrix containing right singular vectors (transposed)
+    """
+    # Compute the eigenvectors and eigenvalues of A*At or At*A, whichever is smaller
     if A.shape[0] < A.shape[1]:
+        # S = np.dot(A, A.T)
         S = A @ A.T
+        # print(A @ A.T)
+        # k = np.linalg.matrix_rank(S)
         k = rank_of_matrix(S.copy())
     else:
+        # S = np.dot(A.T, A)
         S = A.T @ A
+        # k = np.linalg.matrix_rank(S)
         k = rank_of_matrix(S.copy())
 
-    print(f"svd of {A}:{S}")
+    # eigvals, eigvecs = np.linalg.eig(S) #NOT ALLOWED
+    # print(S)
     eigvals, eigvecs = eig(S)
-    print(eigvals)
+    # print(eigvals)
+    # Sort the eigenvectors by descending eigenvalues
     sorted_indices = np.argsort(eigvals)[::-1]
     eigvals = eigvals[sorted_indices]
-    eigvecs = eigvecs[:,sorted_indices]
+    eigvecs = eigvecs[:, sorted_indices]
 
-
+    # Compute the singular values and their reciprocals
     s = np.sqrt(eigvals)
+    # s = s[s > 10e-6]
     s = s[:k]
     s_inv = np.zeros_like(A.T)
     np.fill_diagonal(s_inv, 1.0 / s)
 
-    if(A.shape[0] > A.shape[1]):
+    # Compute the left and right singular vectors
+    # if(A.shape[0] > A.shape[1]):
+    if (A.shape[0] > A.shape[1]):
         U = np.dot(A, np.dot(eigvecs, s_inv))
         V_T = eigvecs.T
-        if(len(s) != V_T.shape[0]): V_T = V_T[:len(s) - V_T.shape[0], :] 
+        if (len(s) != V_T.shape[0]):
+            V_T = V_T[:len(s) - V_T.shape[0], :]
 
     else:
         U = eigvecs
         V_T = np.dot(s_inv, np.dot(U.T, A))
-        if(len(s) != U.shape[1]): U = U[:, :len(s) - U.shape[1]]
+        if (len(s) != U.shape[1]):
+            U = U[:, :len(s) - U.shape[1]]
+
+    # else:
+    #     V_T = np.dot(s_inv, np.dot(eigvecs, A))
+    #     U = eigvecs.T
+    #     if(len(s) != V_T.shape[0]): V_T = V_T[:len(s) - V_T.shape[0], :]
 
     sigma = np.zeros([U.shape[1], V_T.shape[0]])
+    # sigma = np.zeros([len(s), len(s)])
+    # sigma = np.diag(s)
+    # if(A.shape[0] < A.shape[1]):
     for i in range(len(s)):
         sigma[i, i] = s[i]
+    # else:
+    #     for i in range(len(s)):
+    #         sigma[i, i] = s[i]
 
     return U, s, sigma, V_T
 
 
 def ReducedSVD(A, threshold=0, to_remove=0):
     U, s, sigma, V_trans = SVD(A)
-    print(f"reduced svd of {A}:{S}")
+    # print(s)
+    # While converting to python code we will convert into GUI asking-
+    #       - Removal based on:-
+    #       - 1. Hyper parameter
+    #       - 2. Threshold
+
+    # Removal based on hyper parameter
     if (to_remove < len(s) and to_remove > 0):
         s = s[:-to_remove]
+        # print(s)
         U = U[:, :-to_remove]
         V_trans = V_trans[:-to_remove, :]
         sigma = sigma[:-to_remove, :-to_remove]
 
     elif (to_remove < 0):
-        print("The number of eigen values to be removed is Invalid!!")
+        print("The number of eigen values to be romved is Invalid!!")
         exit()
 
+    # Removal based on threshold
     if (threshold < s[0] and threshold > 0):
         s = s[s >= threshold]
+        # print(s)
         U = U[:, :len(s)]
         V_trans = V_trans[:len(s), :]
         sigma = sigma[:len(s), :len(s)]
@@ -131,7 +225,9 @@ def ReducedSVD(A, threshold=0, to_remove=0):
     return U, s, sigma, V_trans
 
 
-if __name__ == "__main__":
+if (__name__ == "__main__"):
+    # tryy = np.array([[0.6, 0.4, 0.9], [0.3, 0.1, 0.7], [0.1, 0.5, 0.8], [0.55, 0.45, 0.5], [0.7, 0.7 , 0.7]])
+    # tryy = np.array([[0.6, 0.4, 0.9], [0.3, 0.1, 0.7]])
     tryy = np.array([[0.89411765, 0.84117647, 0.77058824, 0.54411765, 0.91176471,
                       0.784375, 0.7625, 0.61785714, 0.69444444, 0.76666667,
                       0.6875, 0.58181818, 0.62222222, 0.44, 0.6,
